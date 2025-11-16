@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model bookings {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  room_id      String   @db.Uuid
+  user_id      String   @db.Uuid
+
+  /// richtig: Zeit NUR als Time
+  date         DateTime @db.Date
+  starts_at    DateTime @db.Time
+  ends_at      DateTime @db.Time
+
+  people_count Int
+  purpose      String?
+  status       String   @default("confirmed")
+  created_at   DateTime @default(now()) @db.Timestamptz
+
+  rooms        rooms    @relation(fields: [room_id], references: [id])
+  users        users    @relation(fields: [user_id], references: [id])
+}
+
+model exceptions {
+  id        Int       @id @default(autoincrement())
+  date      DateTime  @unique @db.Date
+  opens     DateTime? @db.Time
+  closes    DateTime? @db.Time
+  is_closed Boolean   @default(true)
+  reason    String?
+}
+
+model opening_hours {
+  weekday   Int      @id
+  opens     DateTime @db.Time
+  closes    DateTime @db.Time
+  is_closed Boolean  @default(false)
+  note      String?
+}
+
+model rooms {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String     @unique
+  capacity    Int
+  description String
+  features    String[]   @default([])
+  photo_url   String?
+  is_active   Boolean    @default(true)
+  location    String
+
+  bookings    bookings[]
+}
+
+model users {
+  id            String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  uni_email     String     @unique
+  password_hash String
+  role          String
+  display_name  String
+  created_at    DateTime   @default(now()) @db.Timestamptz
+
+  bookings      bookings[]
+}
