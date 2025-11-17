@@ -467,15 +467,6 @@ app.get("/me", async (req, res) => {
   }
 });
 
-app.use(cors({
-  origin: [
-    "http://localhost:3000",
-    "https://dein-frontend-name.vercel.app", // später anpassen
-    "https://deine-domain.de" // falls eigene Domain
-  ],
-  credentials: true,
-}));
-
 
 
 // Server starten
