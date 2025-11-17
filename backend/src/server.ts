@@ -12,7 +12,7 @@ const app = express();
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: true, // ALLE ORIGINS ERLAUBEN (für DEV)
+  origin: process.env.CORS_ORIGIN, // ALLE ORIGINS ERLAUBEN (für DEV)
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -472,5 +472,5 @@ app.get("/me", async (req, res) => {
 // Server starten
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => {
-  console.log(`Server läuft auf http://localhost:${PORT}`);
+  console.log(`Server läuft auf ${PORT}`);
 });
