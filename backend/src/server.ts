@@ -6,17 +6,21 @@ import cors from "cors";
 import cookieParser from "cookie-parser"
 import bcrypt from "bcrypt"; 
 import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
+
+dotenv.config(); 
 
 const app = express();
-
-app.use(express.json());
-app.use(cookieParser());
 app.use(cors({
   origin: process.env.CORS_ORIGIN, // ALLE ORIGINS ERLAUBEN (für DEV)
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
+
+app.use(express.json());
+app.use(cookieParser());
+
 
 // Root Route
 app.get("/", (req, res) => {
