@@ -388,7 +388,7 @@ app.post("/auth/register", async (req, res) => {
     // JWT erzeugen
     const token = jwt.sign(
       { userId: user.id, email: user.uni_email },
-      "SUPER_SECRET_KEY", // später env
+      process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );
 
@@ -425,7 +425,7 @@ app.post("/auth/login", async (req, res) => {
 
     const token = jwt.sign(
       { userId: user.id, email: user.uni_email },
-      "SUPER_SECRET_KEY",
+      process.env.JWT_SECRET!,
       { expiresIn: "7d" }
     );
 
@@ -451,7 +451,7 @@ app.get("/me", async (req, res) => {
     }
 
     const token = auth.replace("Bearer ", "");
-    const decoded = jwt.verify(token, "SUPER_SECRET_KEY") as { userId: string };
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
 
     const user = await prisma.users.findUnique({
       where: { id: decoded.userId },
