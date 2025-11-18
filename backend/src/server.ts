@@ -27,6 +27,113 @@ app.get("/", (req, res) => {
   res.json({ message: "Hohenheim Gruppenräume API läuft 🚀" });
 });
 
+// 📌 Registrierung
+app.post("/auth/register", async (req, res) => {
+  try {
+    const { email, password, displayName } = req.body;
+
+    if (!email || !password || !displayName) {
+      return res.status(400).json({ error: "email, password und displayName sind erforderlich" });
+    }
+
+    // Passwort hashen
+    const hash = await bcrypt.hash(password, 10);
+
+    const user = await prisma.users.create({
+      data: {
+        uni_email: email,
+        password_hash: hash,
+        display_name: displayName,
+        role: "student",
+      },
+    });
+
+    // JWT erzeugen
+    const token = jwt.sign(
+      { userId: user.id, email: user.uni_email },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" }
+    );
+
+    res.status(201).json({
+      message: "Registrierung erfolgreich",
+      userId: user.id,
+      token,
+    });
+
+  } catch (err: any) {
+    console.error("Registrierungsfehler:", err);
+    res.status(500).json({ error: "Registrierung fehlgeschlagen" });
+  }
+});
+
+// 📌 Login
+app.post("/auth/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    const user = await prisma.users.findUnique({
+      where: { uni_email: email },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: "Benutzer existiert nicht" });
+    }
+
+    const isValid = await bcrypt.compare(password, user.password_hash);
+
+    if (!isValid) {
+      return res.status(400).json({ error: "Falsches Passwort" });
+    }
+
+    const token = jwt.sign(
+      { userId: user.id, email: user.uni_email },
+      process.env.JWT_SECRET!,
+      { expiresIn: "7d" }
+    );
+
+    res.json({
+      message: "Login erfolgreich",
+      token,
+      userId: user.id,
+    });
+
+  } catch (err) {
+    console.error("Loginfehler:", err);
+    res.status(500).json({ error: "Login fehlgeschlagen" });
+  }
+});
+
+// 📌 Aktuellen Benutzer abrufen
+app.get("/me", async (req, res) => {
+  try {
+    const auth = req.headers.authorization;
+
+    if (!auth) {
+      return res.status(401).json({ error: "Kein Token übermittelt" });
+    }
+
+    const token = auth.replace("Bearer ", "");
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+
+    const user = await prisma.users.findUnique({
+      where: { id: decoded.userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: "Benutzer nicht gefunden" });
+    }
+
+    res.json({
+      name: user.display_name,
+      email: user.uni_email,
+      id: user.id,
+    });
+  } catch (err) {
+    res.status(401).json({ error: "Token ungültig" });
+  }
+});
+
 // 📌 Alle Räume abrufen
 app.get("/rooms", async (req, res) => {
   try {
@@ -363,114 +470,6 @@ app.get("/exceptions", async (req, res) => {
     res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
-
-// 📌 Registrierung
-app.post("/auth/register", async (req, res) => {
-  try {
-    const { email, password, displayName } = req.body;
-
-    if (!email || !password || !displayName) {
-      return res.status(400).json({ error: "email, password und displayName sind erforderlich" });
-    }
-
-    // Passwort hashen
-    const hash = await bcrypt.hash(password, 10);
-
-    const user = await prisma.users.create({
-      data: {
-        uni_email: email,
-        password_hash: hash,
-        display_name: displayName,
-        role: "student",
-      },
-    });
-
-    // JWT erzeugen
-    const token = jwt.sign(
-      { userId: user.id, email: user.uni_email },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
-    res.status(201).json({
-      message: "Registrierung erfolgreich",
-      userId: user.id,
-      token,
-    });
-
-  } catch (err: any) {
-    console.error("Registrierungsfehler:", err);
-    res.status(500).json({ error: "Registrierung fehlgeschlagen" });
-  }
-});
-
-// 📌 Login
-app.post("/auth/login", async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const user = await prisma.users.findUnique({
-      where: { uni_email: email },
-    });
-
-    if (!user) {
-      return res.status(400).json({ error: "Benutzer existiert nicht" });
-    }
-
-    const isValid = await bcrypt.compare(password, user.password_hash);
-
-    if (!isValid) {
-      return res.status(400).json({ error: "Falsches Passwort" });
-    }
-
-    const token = jwt.sign(
-      { userId: user.id, email: user.uni_email },
-      process.env.JWT_SECRET!,
-      { expiresIn: "7d" }
-    );
-
-    res.json({
-      message: "Login erfolgreich",
-      token,
-      userId: user.id,
-    });
-
-  } catch (err) {
-    console.error("Loginfehler:", err);
-    res.status(500).json({ error: "Login fehlgeschlagen" });
-  }
-});
-
-// 📌 Aktuellen Benutzer abrufen
-app.get("/me", async (req, res) => {
-  try {
-    const auth = req.headers.authorization;
-
-    if (!auth) {
-      return res.status(401).json({ error: "Kein Token übermittelt" });
-    }
-
-    const token = auth.replace("Bearer ", "");
-    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
-
-    const user = await prisma.users.findUnique({
-      where: { id: decoded.userId },
-    });
-
-    if (!user) {
-      return res.status(404).json({ error: "Benutzer nicht gefunden" });
-    }
-
-    res.json({
-      name: user.display_name,
-      email: user.uni_email,
-      id: user.id,
-    });
-  } catch (err) {
-    res.status(401).json({ error: "Token ungültig" });
-  }
-});
-
 
 
 // Server starten
