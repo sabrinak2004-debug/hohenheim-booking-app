@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/server.js",
-  
   "scripts": {
     "dev": "ts-node-dev src/server.ts",
     "build": "tsc",
@@ -11,7 +10,6 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:generate": "prisma generate"
   },
-
   "keywords": [],
   "author": "",
   "license": "ISC",
@@ -35,6 +33,7 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^24.10.1",
     "nodemon": "^3.1.11",
+    "prisma": "^6.19.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   }
