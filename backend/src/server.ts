@@ -11,8 +11,16 @@ import dotenv from "dotenv";
 dotenv.config(); 
 
 const app = express();
+
+const allowedOrigins = [
+  "https://frontend-zeta-jet-62.vercel.app",
+  "https://frontend-op0hux8wo-sabrinak2004-debugs-projects.vercel.app",
+  "http://localhost:3000"
+];
+
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN, // ALLE ORIGINS ERLAUBEN (für DEV)
+  origin: allowedOrigins,
   credentials: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
