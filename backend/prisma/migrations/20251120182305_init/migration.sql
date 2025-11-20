@@ -4,22 +4,22 @@ CREATE TABLE "bookings" (
     "room_id" UUID NOT NULL,
     "user_id" UUID NOT NULL,
     "date" DATE NOT NULL,
-    "starts_at" TIME NOT NULL,
-    "ends_at" TIME NOT NULL,
+    "starts_at" TIME(6) NOT NULL,
+    "ends_at" TIME(6) NOT NULL,
     "people_count" INTEGER NOT NULL,
     "purpose" TEXT,
     "status" TEXT NOT NULL DEFAULT 'confirmed',
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "bookings_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "booking_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "exceptions" (
     "id" SERIAL NOT NULL,
     "date" DATE NOT NULL,
-    "opens" TIME,
-    "closes" TIME,
+    "opens" TIME(6),
+    "closes" TIME(6),
     "is_closed" BOOLEAN NOT NULL DEFAULT true,
     "reason" TEXT,
 
@@ -29,8 +29,8 @@ CREATE TABLE "exceptions" (
 -- CreateTable
 CREATE TABLE "opening_hours" (
     "weekday" INTEGER NOT NULL,
-    "opens" TIME NOT NULL,
-    "closes" TIME NOT NULL,
+    "opens" TIME(6) NOT NULL,
+    "closes" TIME(6) NOT NULL,
     "is_closed" BOOLEAN NOT NULL DEFAULT false,
     "note" TEXT,
 
@@ -58,7 +58,7 @@ CREATE TABLE "users" (
     "password_hash" TEXT NOT NULL,
     "role" TEXT NOT NULL,
     "display_name" TEXT NOT NULL,
-    "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
@@ -73,7 +73,7 @@ CREATE UNIQUE INDEX "rooms_name_key" ON "rooms"("name");
 CREATE UNIQUE INDEX "users_uni_email_key" ON "users"("uni_email");
 
 -- AddForeignKey
-ALTER TABLE "bookings" ADD CONSTRAINT "bookings_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "rooms"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_room_id_fkey" FOREIGN KEY ("room_id") REFERENCES "rooms"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
 
 -- AddForeignKey
-ALTER TABLE "bookings" ADD CONSTRAINT "bookings_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "bookings" ADD CONSTRAINT "bookings_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE NO ACTION ON UPDATE NO ACTION;
