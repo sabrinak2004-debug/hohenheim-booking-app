@@ -237,64 +237,244 @@ app.get("/rooms/:id/availability", async (req, res) => {
     console.error("Fehler beim Abrufen der Verfügbarkeit:", err);
     res.status(500).json({ error: "Interner Serverfehler" });
   }
-});
-// 📌 BUCHUNG ANLEGEN
+  });
+// 📌 Buchung anlegen
 app.post("/bookings", async (req, res) => {
   try {
     const {
       roomId,
       userId,
-      date,      // "2025-01-10"
-      start,     // "10:00"
-      end,       // "11:00"
+      date,        // "2025-11-15"
+      start,       // "10:00"
+      end,         // "11:00"
       peopleCount,
-      purpose,
+      purpose
     } = req.body;
 
-    // --- einfache Validierung ---
     if (!roomId || !userId || !date || !start || !end || !peopleCount) {
-      return res
-        .status(400)
-        .json({ error: "roomId, userId, date, start, end, peopleCount sind erforderlich" });
+      return res.status(400).json({ error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder" });
     }
 
-    // Datum/Zeit für Prisma vorbereiten
-    const dateOnly = new Date(date); // wird in @db.Date gespeichert
-
-    const startsAt = new Date(`${date}T${start}:00`);
-    const endsAt   = new Date(`${date}T${end}:00`);
-
-    // 👉 KEIN Aufruf von valid_opening() mehr hier!
-    // Die Öffnungsregeln & Kapazitätschecks macht dein Trigger in der DB.
-
-    const booking = await prisma.bookings.create({
-      data: {
-        room_id: roomId,
-        user_id: userId,
-        date: dateOnly,
-        starts_at: startsAt,
-        ends_at: endsAt,
-        people_count: peopleCount,
+    // Eintrag in bookings-Tabelle per SQL anlegen
+    const rows: any = await prisma.$queryRawUnsafe(
+      `
+      INSERT INTO bookings (
+        room_id,
+        user_id,
+        date,
+        starts_at,
+        ends_at,
+        people_count,
         purpose,
-      },
+        status
+      )
+      VALUES (
+        $1::uuid,
+        $2::uuid,
+        $3::date,
+        $4::time,
+        $5::time,
+        $6,
+        $7,
+        'confirmed'
+      )
+      RETURNING *;
+      `,
+      roomId,
+      userId,
+      date,
+      start,
+      end,
+      Number(peopleCount),
+      purpose ?? null
+    );
+
+    const booking = rows[0];
+
+    res.status(201).json(booking);
+  } catch (err: any) {
+    console.error("Fehler beim Anlegen der Buchung:", err);
+
+    // einfache Fehlermeldung ausgeben, z.B. wenn Overlap/Öffnungszeiten verletzt werden
+    res.status(500).json({ error: "Buchung fehlgeschlagen", detail: String(err.message ?? err) });
+  }
+});
+// 📌 Buchungen eines Nutzers abrufen
+app.get("/users/:userId/bookings", async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const bookings = await prisma.bookings.findMany({
+      where: { user_id: userId },
+      orderBy: [
+        { date: "asc" },
+        { starts_at: "asc" }
+      ],
+      include: {
+        rooms: true,   // Raumdaten mit zurückgeben
+      }
     });
 
-    return res.status(201).json(booking);
-  } catch (err: any) {
-    console.error("Fehler bei /bookings:", err);
+    res.json(bookings);
 
-    // Postgres-Fehlertext an den Client weitergeben (z.B. Trigger-Fehler)
-    if (err.meta?.cause) {
-      return res.status(400).json({ error: err.meta.cause });
-    }
-    if (err.message) {
-      return res.status(400).json({ error: err.message });
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Buchungen:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+// 📌 Öffnungszeiten abrufen
+app.get("/opening-hours", async (req, res) => {
+  try {
+    const hours = await prisma.opening_hours.findMany({
+      orderBy: { weekday: "asc" }
+    });
+    res.json(hours);
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+// 📌 Schließtage / Feiertage
+app.get("/exceptions", async (req, res) => {
+  try {
+    const exceptions = await prisma.exceptions.findMany({
+      orderBy: { date: "asc" }
+    });
+    res.json(exceptions);
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Feiertage:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+app.patch("/bookings/:id/cancel", async (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const booking = await prisma.bookings.findUnique({
+      where: { id: id }
+    });
+
+    if (!booking) {
+      return res.status(404).json({ error: "Buchung nicht gefunden" });
     }
 
-    return res.status(500).json({ error: "Unbekannter Fehler beim Buchen" });
+    const updated = await prisma.bookings.update({
+      where: { id: id },
+      data: { status: "cancelled" }
+    });
+
+    res.json({ message: "Buchung storniert", booking: updated });
+
+  } catch (err) {
+    console.error("Fehler beim Stornieren:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 
+// 📌 Gebuchte Slots eines Raums an einem Datum abrufen (Prisma-kompatibel)
+app.get("/bookings/by-room-and-date", async (req, res) => {
+  const roomId = req.query.roomId as string;
+  const dateStr = req.query.date as string; // "YYYY-MM-DD"
+
+  if (!roomId || !dateStr) {
+    return res.status(400).json({ error: "roomId und date sind erforderlich" });
+  }
+
+  // Für Prisma: Date-Range über den Tag bauen (UTC), statt String-Gleichheit
+  const day = new Date(`${dateStr}T00:00:00.000Z`);
+  const next = new Date(day);
+  next.setUTCDate(day.getUTCDate() + 1);
+
+  try {
+    // 1) Bevorzugt: Prisma mit Tages-Range
+    const bookings = await prisma.bookings.findMany({
+      where: {
+        room_id: roomId,
+        date: { gte: day, lt: next }, // <-- kein String-Vergleich!
+        status: { in: ["pending", "confirmed"] },
+      },
+      orderBy: { starts_at: "asc" },
+    });
+
+    return res.json(bookings);
+  } catch (err) {
+    console.error("Prisma-Range-Query fehlgeschlagen, versuche RAW:", err);
+
+    // 2) Fallback: RAW-SQL (falls Spalte als DATE vorliegt o.Ä.)
+    try {
+      const rows: any = await prisma.$queryRawUnsafe(
+        `
+        SELECT *
+        FROM bookings
+        WHERE room_id = $1::uuid
+          AND date = $2::date
+          AND status IN ('pending','confirmed')
+        ORDER BY starts_at ASC;
+        `,
+        roomId,
+        dateStr
+      );
+
+      return res.json(rows);
+    } catch (inner) {
+      console.error("RAW-Fallback ebenfalls fehlgeschlagen:", inner);
+      return res.status(500).json({ error: "Fehler beim Laden der gebuchten Zeiten" });
+    }
+  }
+});
+
+// 📌 Eigene Buchungen abrufen (z. B. für "My Bookings"-Seite)
+app.get("/bookings/me", async (req, res) => {
+  try {
+    const userId = req.query.userId as string;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Parameter ?userId= fehlt" });
+    }
+
+    const bookings = await prisma.bookings.findMany({
+      where: { user_id: userId },
+      orderBy: { date: "asc" },
+      include: {
+        rooms: true, // damit Raumname angezeigt werden kann
+      }
+    });
+
+    res.json(bookings);
+
+  } catch (err) {
+    console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+// 📌 Öffnungszeiten abrufen (für Sidebar im Frontend)
+app.get("/opening-hours", async (req, res) => {
+  try {
+    const hours = await prisma.opening_hours.findMany({
+      orderBy: { weekday: "asc" }
+    });
+
+    res.json(hours);
+
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
+// 📌 Feiertage / Schließtage abrufen
+app.get("/exceptions", async (req, res) => {
+  try {
+    const exceptions = await prisma.exceptions.findMany({
+      orderBy: { date: "asc" }
+    });
+
+    res.json(exceptions);
+
+  } catch (err) {
+    console.error("Fehler beim Abrufen der Feiertage:", err);
+    res.status(500).json({ error: "Interner Serverfehler" });
+  }
+});
 
 // Server starten
 // Server starten (TS-kompatibel)
