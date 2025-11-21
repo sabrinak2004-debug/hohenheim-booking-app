@@ -255,43 +255,20 @@ app.post("/bookings", async (req, res) => {
       return res.status(400).json({ error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder" });
     }
 
-    // Eintrag in bookings-Tabelle per SQL anlegen
-    const rows: any = await prisma.$queryRawUnsafe(
-      `
-      INSERT INTO bookings (
-        room_id,
-        user_id,
-        date,
-        starts_at,
-        ends_at,
-        people_count,
-        purpose,
-        status
-      )
-      VALUES (
-        $1::uuid,
-        $2::uuid,
-        $3::date,
-        $4::time,
-        $5::time,
-        $6,
-        $7,
-        'confirmed'
-      )
-      RETURNING *;
-      `,
-      roomId,
-      userId,
-      date,
-      start,
-      end,
-      Number(peopleCount),
-      purpose ?? null
-    );
+// Eintrag in bookings-Tabelle per SQL anlegen
+const booking = await prisma.bookings.create({
+  data: {
+    room_id: roomId,
+    user_id: userId,
+    date: new Date(date),
+    starts_at: start,
+    ends_at: end,
+    people_count: peopleCount,
+    purpose: req.body.purpose ?? "",
+  },
+});
 
-    const booking = rows[0];
-
-    res.status(201).json(booking);
+res.status(201).json(booking);
   } catch (err: any) {
     console.error("Fehler beim Anlegen der Buchung:", err);
 
