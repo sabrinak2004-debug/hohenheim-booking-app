@@ -199,7 +199,6 @@ app.get("/rooms/:id/availability", async (req, res) => {
     }
 });
 // 📌 BUCHUNG ANLEGEN
-app.post("/bookings", async (req, res) => {
     try {
         const { roomId, userId, date, // "2025-01-10"
         start, // "10:00"
