@@ -240,42 +240,70 @@ app.get("/rooms/:id/availability", async (req, res) => {
   });
 
 app.post("/bookings", async (req, res) => {
+  console.log("POST /bookings – raw body:", req.body);
+
   try {
+    // Body auslesen (falls req.body undefined ist, auf {} fallen)
     const {
       roomId,
       userId,
-      date,        // "2025-11-15"
-      start,       // "10:00"
-      end,         // "11:00"
+      date,
+      start,
+      end,
       peopleCount,
-      purpose
-    } = req.body;
+      purpose,
+    } = req.body || {};
 
-    if (!roomId || !userId || !date || !start || !end || !peopleCount) {
-      return res.status(400).json({ error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder" });
+    // Werte normalisieren (Strings trimmen, peopleCount in Zahl umwandeln)
+    const normalized = {
+      roomId: roomId ? String(roomId).trim() : "",
+      userId: userId ? String(userId).trim() : "",
+      date: date ? String(date).substring(0, 10) : "",
+      start: start ? String(start).substring(0, 5) : "",
+      end: end ? String(end).substring(0, 5) : "",
+      peopleCount: peopleCount != null ? Number(peopleCount) : 0,
+      purpose: typeof purpose === "string" ? purpose : "",
+    };
+
+    // Fürs Debugging: auch die normalisierten Werte loggen
+    console.log("POST /bookings – normalized:", normalized);
+
+    if (
+      !normalized.roomId ||
+      !normalized.userId ||
+      !normalized.date ||
+      !normalized.start ||
+      !normalized.end ||
+      normalized.peopleCount <= 0
+    ) {
+      return res.status(400).json({
+        error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder",
+        received: normalized,
+      });
     }
 
-// Eintrag in bookings-Tabelle per SQL anlegen
-const booking = await prisma.bookings.create({
-  data: {
-    room_id: roomId,
-    user_id: userId,
-    date: new Date(date),
-    starts_at: start,
-    ends_at: end,
-    people_count: peopleCount,
-    purpose: req.body.purpose ?? "",
-  },
-});
+    const booking = await prisma.bookings.create({
+      data: {
+        room_id: normalized.roomId,
+        user_id: normalized.userId,
+        date: new Date(normalized.date),
+        starts_at: normalized.start,
+        ends_at: normalized.end,
+        people_count: normalized.peopleCount,
+        purpose: normalized.purpose,
+      },
+    });
 
-res.status(201).json(booking);
+    return res.status(201).json(booking);
   } catch (err: any) {
     console.error("Fehler beim Anlegen der Buchung:", err);
-
-    // einfache Fehlermeldung ausgeben, z.B. wenn Overlap/Öffnungszeiten verletzt werden
-    res.status(500).json({ error: "Buchung fehlgeschlagen", detail: String(err.message ?? err) });
+    return res.status(500).json({
+      error: "Buchung fehlgeschlagen",
+      detail: String(err.message ?? err),
+    });
   }
 });
+
 
 // 📌 Buchungen eines Nutzers abrufen
 app.get("/users/:userId/bookings", async (req, res) => {
