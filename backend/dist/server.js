@@ -203,45 +203,33 @@ app.post("/bookings", async (req, res) => {
     try {
         // Body auslesen (falls req.body undefined ist, auf {} fallen)
         const { roomId, userId, date, start, end, peopleCount, purpose, } = req.body || {};
-        // Werte normalisieren (Strings trimmen, peopleCount in Zahl umwandeln)
-        const normalized = {
-            roomId: roomId ? String(roomId).trim() : "",
-            userId: userId ? String(userId).trim() : "",
-            date: date ? String(date).substring(0, 10) : "",
-            start: start ? String(start).substring(0, 5) : "",
-            end: end ? String(end).substring(0, 5) : "",
-            peopleCount: peopleCount != null ? Number(peopleCount) : 0,
-            purpose: typeof purpose === "string" ? purpose : "",
-        };
-        // Fürs Debugging: auch die normalisierten Werte loggen
-        console.log("POST /bookings – normalized:", normalized);
-        if (!normalized.roomId ||
-            !normalized.userId ||
-            !normalized.date ||
-            !normalized.start ||
-            !normalized.end ||
-            normalized.peopleCount <= 0) {
-            return res.status(400).json({
-                error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder",
-                received: normalized,
-            });
-        }
+        // Datum als Date-Objekt
+        const dateOnly = new Date(date); // entspricht dem Tag, z. B. 2025-11-22
+        // Startzeit in ein volles DateTime umwandeln
+        const [startHour, startMin] = String(start).split(":").map(Number);
+        const startsAt = new Date(dateOnly);
+        startsAt.setHours(startHour, startMin, 0, 0);
+        // Endzeit in ein volles DateTime umwandeln
+        const [endHour, endMin] = String(end).split(":").map(Number);
+        const endsAt = new Date(dateOnly);
+        endsAt.setHours(endHour, endMin, 0, 0);
+        // Eintrag in bookings-Tabelle mit richtigen Typen anlegen
         const booking = await prisma.bookings.create({
             data: {
-                room_id: normalized.roomId,
-                user_id: normalized.userId,
-                date: new Date(normalized.date),
-                starts_at: normalized.start,
-                ends_at: normalized.end,
-                people_count: normalized.peopleCount,
-                purpose: normalized.purpose,
+                room_id: roomId,
+                user_id: userId,
+                date: dateOnly, // Prisma-Feld `date` (Date / DateTime)
+                starts_at: startsAt, // jetzt ein gültiges DateTime
+                ends_at: endsAt, // auch DateTime
+                people_count: Number(peopleCount),
+                purpose: purpose ?? "",
             },
         });
-        return res.status(201).json(booking);
+        res.status(201).json(booking);
     }
     catch (err) {
         console.error("Fehler beim Anlegen der Buchung:", err);
-        return res.status(500).json({
+        res.status(500).json({
             error: "Buchung fehlgeschlagen",
             detail: String(err.message ?? err),
         });
