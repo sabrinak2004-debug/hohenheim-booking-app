@@ -13,26 +13,29 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const dotenv_1 = __importDefault(require("dotenv"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
-// CORS
 app.use((0, cors_1.default)({
-    origin: (origin, callback) => callback(null, true),
+    origin: (origin, callback) => {
+        callback(null, true); // erlaubt dynamisch alle Domains
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    optionsSuccessStatus: 200
 }));
 app.use(express_1.default.json());
 app.use((0, cookie_parser_1.default)());
-// ROOT
+// Root Route
 app.get("/", (req, res) => {
     res.json({ message: "Hohenheim Gruppenräume API läuft 🚀" });
 });
-// ---------------- AUTH ----------------
+// 📌 Registrierung
 app.post("/auth/register", async (req, res) => {
     try {
         const { email, password, displayName } = req.body;
         if (!email || !password || !displayName) {
             return res.status(400).json({ error: "email, password und displayName sind erforderlich" });
         }
+        // Passwort hashen
         const hash = await bcrypt_1.default.hash(password, 10);
         const user = await prisma.users.create({
             data: {
@@ -42,83 +45,108 @@ app.post("/auth/register", async (req, res) => {
                 role: "student",
             },
         });
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-        res.status(201).json({ token, userId: user.id });
+        // JWT erzeugen
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.uni_email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        res.status(201).json({
+            message: "Registrierung erfolgreich",
+            userId: user.id,
+            token,
+        });
     }
     catch (err) {
-        console.error(err);
+        console.error("Registrierungsfehler:", err);
         res.status(500).json({ error: "Registrierung fehlgeschlagen" });
     }
 });
+// 📌 Login
 app.post("/auth/login", async (req, res) => {
     try {
         const { email, password } = req.body;
         const user = await prisma.users.findUnique({
             where: { uni_email: email },
         });
-        if (!user)
+        if (!user) {
             return res.status(400).json({ error: "Benutzer existiert nicht" });
-        const ok = await bcrypt_1.default.compare(password, user.password_hash);
-        if (!ok)
+        }
+        const isValid = await bcrypt_1.default.compare(password, user.password_hash);
+        if (!isValid) {
             return res.status(400).json({ error: "Falsches Passwort" });
-        const token = jsonwebtoken_1.default.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-        res.json({ token, userId: user.id });
+        }
+        const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.uni_email }, process.env.JWT_SECRET, { expiresIn: "7d" });
+        res.json({
+            message: "Login erfolgreich",
+            token,
+            userId: user.id,
+        });
     }
     catch (err) {
+        console.error("Loginfehler:", err);
         res.status(500).json({ error: "Login fehlgeschlagen" });
     }
 });
-// ---------------- USER ----------------
+// 📌 Aktuellen Benutzer abrufen
 app.get("/me", async (req, res) => {
     try {
         const auth = req.headers.authorization;
-        if (!auth)
+        if (!auth) {
             return res.status(401).json({ error: "Kein Token übermittelt" });
+        }
         const token = auth.replace("Bearer ", "");
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        const user = await prisma.users.findUnique({ where: { id: decoded.userId } });
-        if (!user)
+        const user = await prisma.users.findUnique({
+            where: { id: decoded.userId },
+        });
+        if (!user) {
             return res.status(404).json({ error: "Benutzer nicht gefunden" });
+        }
         res.json({
-            id: user.id,
             name: user.display_name,
             email: user.uni_email,
+            id: user.id,
         });
     }
     catch (err) {
         res.status(401).json({ error: "Token ungültig" });
     }
 });
-// ---------------- ROOMS ----------------
+// 📌 Alle Räume abrufen
 app.get("/rooms", async (req, res) => {
     try {
-        const rooms = await prisma.rooms.findMany({ orderBy: { name: "asc" } });
+        const rooms = await prisma.rooms.findMany({
+            orderBy: { name: "asc" }
+        });
         res.json(rooms);
     }
     catch (err) {
-        res.status(500).json({ error: "Fehler beim Laden der Räume" });
+        console.error("Fehler beim Abrufen der Räume:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
     }
 });
+// 📌 Einzelnen Raum abrufen
 app.get("/rooms/:id", async (req, res) => {
     try {
+        const id = req.params.id;
         const room = await prisma.rooms.findUnique({
-            where: { id: req.params.id },
+            where: { id },
         });
-        if (!room)
+        if (!room) {
             return res.status(404).json({ error: "Raum nicht gefunden" });
+        }
         res.json(room);
     }
     catch (err) {
-        res.status(500).json({ error: "Fehler beim Laden des Raumes" });
+        console.error("Fehler beim Abrufen des Raums:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
     }
 });
-// ---------------- AVAILABILITY ----------------
+// 📌 Verfügbarkeit eines Raums abrufen
 app.get("/rooms/:id/availability", async (req, res) => {
     try {
         const roomId = req.params.id;
         const date = req.query.date;
-        if (!date)
+        if (!date) {
             return res.status(400).json({ error: "Parameter ?date=YYYY-MM-DD fehlt" });
+        }
         const result = await prisma.$queryRawUnsafe(`
       WITH bounds AS (
         SELECT
@@ -134,54 +162,250 @@ app.get("/rooms/:id/availability", async (req, res) => {
             ($1::date + (SELECT closes FROM bounds) - interval '30 min'),
             interval '30 min'
         ) AS start_ts
+      ),
+      occupied AS (
+        SELECT 
+          ($1::date + starts_at) AS s,
+          ($1::date + ends_at) AS e
+        FROM bookings
+        WHERE room_id = $2::uuid
+          AND date = $1::date
+          AND status IN ('pending','confirmed')
       )
       SELECT json_agg(
         json_build_object(
           'start', to_char(start_ts, 'HH24:MI'),
           'end',   to_char(start_ts + interval '30 min', 'HH24:MI')
         )
+        ORDER BY start_ts
       ) AS free
       FROM series
-    `, date);
-        const free = result?.[0]?.free ?? [];
-        res.json({ roomId, date, free });
+      WHERE NOT EXISTS (
+        SELECT 1 
+        FROM occupied o
+        WHERE tsrange(start_ts, start_ts + interval '30 min', '[)')
+          && tsrange(o.s, o.e, '[)')
+      );
+      `, date, roomId);
+        res.json({
+            roomId,
+            date,
+            free: result?.[0]?.free ?? []
+        });
     }
     catch (err) {
         console.error("Fehler beim Abrufen der Verfügbarkeit:", err);
         res.status(500).json({ error: "Interner Serverfehler" });
     }
 });
-// ---------------- BOOKINGS ----------------
 app.post("/bookings", async (req, res) => {
+    console.log("POST /bookings – raw body:", req.body);
     try {
-        const { roomId, userId, date, start, end, peopleCount, purpose } = req.body;
-        if (!roomId || !userId || !date || !start || !end || !peopleCount) {
-            return res.status(400).json({ error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder" });
+        // Body auslesen (falls req.body undefined ist, auf {} fallen)
+        const { roomId, userId, date, start, end, peopleCount, purpose, } = req.body || {};
+        // Werte normalisieren (Strings trimmen, peopleCount in Zahl umwandeln)
+        const normalized = {
+            roomId: roomId ? String(roomId).trim() : "",
+            userId: userId ? String(userId).trim() : "",
+            date: date ? String(date).substring(0, 10) : "",
+            start: start ? String(start).substring(0, 5) : "",
+            end: end ? String(end).substring(0, 5) : "",
+            peopleCount: peopleCount != null ? Number(peopleCount) : 0,
+            purpose: typeof purpose === "string" ? purpose : "",
+        };
+        // Fürs Debugging: auch die normalisierten Werte loggen
+        console.log("POST /bookings – normalized:", normalized);
+        if (!normalized.roomId ||
+            !normalized.userId ||
+            !normalized.date ||
+            !normalized.start ||
+            !normalized.end ||
+            normalized.peopleCount <= 0) {
+            return res.status(400).json({
+                error: "roomId, userId, date, start, end, peopleCount sind Pflichtfelder",
+                received: normalized,
+            });
         }
-        const rows = await prisma.$queryRawUnsafe(`
-      INSERT INTO bookings (
-        room_id, user_id, date, starts_at, ends_at, people_count, purpose, status
-      )
-      VALUES (
-        $1::uuid,
-        $2::uuid,
-        $3::date,
-        ($3::date + $4::time)::timestamp,
-        ($3::date + $5::time)::timestamp,
-        $6,
-        $7,
-        'confirmed'
-      )
-      RETURNING *;
-    `, roomId, userId, date, start, end, Number(peopleCount), purpose ?? null);
-        res.status(201).json(rows[0]);
+        const booking = await prisma.bookings.create({
+            data: {
+                room_id: normalized.roomId,
+                user_id: normalized.userId,
+                date: new Date(normalized.date),
+                starts_at: normalized.start,
+                ends_at: normalized.end,
+                people_count: normalized.peopleCount,
+                purpose: normalized.purpose,
+            },
+        });
+        return res.status(201).json(booking);
     }
     catch (err) {
         console.error("Fehler beim Anlegen der Buchung:", err);
-        res.status(500).json({ error: "Buchung fehlgeschlagen", detail: err.message });
+        return res.status(500).json({
+            error: "Buchung fehlgeschlagen",
+            detail: String(err.message ?? err),
+        });
     }
 });
-// ---------------- SERVER ----------------
+// 📌 Buchungen eines Nutzers abrufen
+app.get("/users/:userId/bookings", async (req, res) => {
+    try {
+        const userId = req.params.userId;
+        const bookings = await prisma.bookings.findMany({
+            where: { user_id: userId },
+            orderBy: [
+                { date: "asc" },
+                { starts_at: "asc" }
+            ],
+            include: {
+                rooms: true, // Raumdaten mit zurückgeben
+            }
+        });
+        res.json(bookings);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der Buchungen:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// 📌 Öffnungszeiten abrufen
+app.get("/opening-hours", async (req, res) => {
+    try {
+        const hours = await prisma.opening_hours.findMany({
+            orderBy: { weekday: "asc" }
+        });
+        res.json(hours);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// 📌 Schließtage / Feiertage
+app.get("/exceptions", async (req, res) => {
+    try {
+        const exceptions = await prisma.exceptions.findMany({
+            orderBy: { date: "asc" }
+        });
+        res.json(exceptions);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der Feiertage:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+app.patch("/bookings/:id/cancel", async (req, res) => {
+    try {
+        const id = req.params.id;
+        const booking = await prisma.bookings.findUnique({
+            where: { id: id }
+        });
+        if (!booking) {
+            return res.status(404).json({ error: "Buchung nicht gefunden" });
+        }
+        const updated = await prisma.bookings.update({
+            where: { id: id },
+            data: { status: "cancelled" }
+        });
+        res.json({ message: "Buchung storniert", booking: updated });
+    }
+    catch (err) {
+        console.error("Fehler beim Stornieren:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// 📌 Gebuchte Slots eines Raums an einem Datum abrufen (Prisma-kompatibel)
+app.get("/bookings/by-room-and-date", async (req, res) => {
+    const roomId = req.query.roomId;
+    const dateStr = req.query.date; // "YYYY-MM-DD"
+    if (!roomId || !dateStr) {
+        return res.status(400).json({ error: "roomId und date sind erforderlich" });
+    }
+    // Für Prisma: Date-Range über den Tag bauen (UTC), statt String-Gleichheit
+    const day = new Date(`${dateStr}T00:00:00.000Z`);
+    const next = new Date(day);
+    next.setUTCDate(day.getUTCDate() + 1);
+    try {
+        // 1) Bevorzugt: Prisma mit Tages-Range
+        const bookings = await prisma.bookings.findMany({
+            where: {
+                room_id: roomId,
+                date: { gte: day, lt: next }, // <-- kein String-Vergleich!
+                status: { in: ["pending", "confirmed"] },
+            },
+            orderBy: { starts_at: "asc" },
+        });
+        return res.json(bookings);
+    }
+    catch (err) {
+        console.error("Prisma-Range-Query fehlgeschlagen, versuche RAW:", err);
+        // 2) Fallback: RAW-SQL (falls Spalte als DATE vorliegt o.Ä.)
+        try {
+            const rows = await prisma.$queryRawUnsafe(`
+        SELECT *
+        FROM bookings
+        WHERE room_id = $1::uuid
+          AND date = $2::date
+          AND status IN ('pending','confirmed')
+        ORDER BY starts_at ASC;
+        `, roomId, dateStr);
+            return res.json(rows);
+        }
+        catch (inner) {
+            console.error("RAW-Fallback ebenfalls fehlgeschlagen:", inner);
+            return res.status(500).json({ error: "Fehler beim Laden der gebuchten Zeiten" });
+        }
+    }
+});
+// 📌 Eigene Buchungen abrufen (z. B. für "My Bookings"-Seite)
+app.get("/bookings/me", async (req, res) => {
+    try {
+        const userId = req.query.userId;
+        if (!userId) {
+            return res.status(400).json({ error: "Parameter ?userId= fehlt" });
+        }
+        const bookings = await prisma.bookings.findMany({
+            where: { user_id: userId },
+            orderBy: { date: "asc" },
+            include: {
+                rooms: true, // damit Raumname angezeigt werden kann
+            }
+        });
+        res.json(bookings);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// 📌 Öffnungszeiten abrufen (für Sidebar im Frontend)
+app.get("/opening-hours", async (req, res) => {
+    try {
+        const hours = await prisma.opening_hours.findMany({
+            orderBy: { weekday: "asc" }
+        });
+        res.json(hours);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// 📌 Feiertage / Schließtage abrufen
+app.get("/exceptions", async (req, res) => {
+    try {
+        const exceptions = await prisma.exceptions.findMany({
+            orderBy: { date: "asc" }
+        });
+        res.json(exceptions);
+    }
+    catch (err) {
+        console.error("Fehler beim Abrufen der Feiertage:", err);
+        res.status(500).json({ error: "Interner Serverfehler" });
+    }
+});
+// Server starten
+// Server starten (TS-kompatibel)
 const PORT = Number(process.env.PORT) || 10000;
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server läuft auf Port ${PORT}`);
