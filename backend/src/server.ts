@@ -20,6 +20,11 @@ app.use(cors({
 app.use(express.json());
 app.use(cookieParser());
 
+// ---------------- ROOT ----------------
+app.get("/", (req, res) => {
+  res.json({ message: "Hohenheim Gruppenräume API läuft 🚀" });
+});
+
 // ---------------- REGISTER ----------------
 app.post("/auth/register", async (req, res) => {
   try {
