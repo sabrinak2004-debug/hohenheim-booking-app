@@ -348,15 +348,11 @@ app.patch("/bookings/:id/cancel", async (req, res) => {
       return res.status(404).json({ error: "Buchung nicht gefunden" });
     }
 
+    // ❗ Nur Status ändern, NICHT die Zeiten, NICHT room_id, NICHT user_id
     const updated = await prisma.bookings.update({
       where: { id },
       data: {
-        status: "cancelled",
-        starts_at: old.starts_at,
-        ends_at: old.ends_at,
-        date: old.date,
-        room_id: old.room_id,
-        user_id: old.user_id,
+        status: "cancelled"
       },
     });
 
