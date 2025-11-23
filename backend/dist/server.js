@@ -286,19 +286,19 @@ app.patch("/bookings/:id/cancel", async (req, res) => {
     try {
         const id = req.params.id;
         const booking = await prisma.bookings.findUnique({
-            where: { id: id }
+            where: { id }
         });
         if (!booking) {
             return res.status(404).json({ error: "Buchung nicht gefunden" });
         }
         const updated = await prisma.bookings.update({
-            where: { id: id },
-            data: { status: "cancelled" }
+            where: { id },
+            data: { status: "cancelled" },
         });
         res.json({ message: "Buchung storniert", booking: updated });
     }
     catch (err) {
-        console.error("Fehler beim Stornieren:", err);
+        console.error("Cancel-Fehler:", err);
         res.status(500).json({ error: "Interner Serverfehler" });
     }
 });
