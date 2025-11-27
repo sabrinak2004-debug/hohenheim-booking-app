@@ -77,6 +77,7 @@ app.post("/auth/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    // 1) Benutzer anhand Uni-Mail suchen
     const user = await prisma.users.findUnique({
       where: { uni_email: email },
     });
@@ -85,12 +86,14 @@ app.post("/auth/login", async (req, res) => {
       return res.status(400).json({ error: "Benutzer existiert nicht" });
     }
 
+    // 2) Passwort prüfen
     const isValid = await bcrypt.compare(password, user.password_hash);
 
     if (!isValid) {
       return res.status(400).json({ error: "Falsches Passwort" });
     }
 
+    // 3) JWT erzeugen
     const token = jwt.sign(
       { userId: user.id, email: user.uni_email },
       process.env.JWT_SECRET!,
@@ -108,6 +111,7 @@ app.post("/auth/login", async (req, res) => {
     res.status(500).json({ error: "Login fehlgeschlagen" });
   }
 });
+
 
 // 📌 Aktuellen Benutzer abrufen
 app.get("/me", async (req, res) => {
