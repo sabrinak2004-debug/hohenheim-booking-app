@@ -425,27 +425,44 @@ app.get("/bookings/by-room-and-date", async (req, res) => {
 // 📌 Eigene Buchungen abrufen (z. B. für "My Bookings"-Seite)
 app.get("/bookings/me", async (req, res) => {
   try {
-    const userId = req.query.userId as string;
+// 1) Token prüfen
+const auth = req.headers.authorization;
+if (!auth) {
+  return res.status(401).json({ error: "Kein Token übermittelt" });
+}
 
-    if (!userId) {
-      return res.status(400).json({ error: "Parameter ?userId= fehlt" });
-    }
+const token = auth.replace("Bearer ", "");
 
-    const bookings = await prisma.bookings.findMany({
-      where: { user_id: userId },
-      orderBy: { date: "asc" },
-      include: {
-        rooms: true, // damit Raumname angezeigt werden kann
-      }
-    });
+let decoded: any;
+try {
+  decoded = jwt.verify(token, process.env.JWT_SECRET!);
+} catch (err) {
+  return res.status(401).json({ error: "Token ungültig" });
+}
 
+if (!decoded || typeof decoded !== "object" || !decoded.userId) {
+  return res.status(401).json({ error: "Token ungültig oder userId fehlt" });
+}
+
+// 2) Buchungen laden
+const bookings = await prisma.bookings.findMany({
+  where: { user_id: decoded.userId },
+  orderBy: { date: "asc" },
+  include: {
+    rooms: true,
+  },
+});
+
+res.json(bookings);
+    // 3) Antwort senden
     res.json(bookings);
 
   } catch (err) {
     console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    res.status(401).json({ error: "Token ungültig" });
   }
 });
+
 // 📌 Öffnungszeiten abrufen (für Sidebar im Frontend)
 app.get("/opening-hours", async (req, res) => {
   try {
