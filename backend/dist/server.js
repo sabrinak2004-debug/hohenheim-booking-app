@@ -62,16 +62,19 @@ app.post("/auth/register", async (req, res) => {
 app.post("/auth/login", async (req, res) => {
     try {
         const { email, password } = req.body;
+        // 1) Benutzer anhand Uni-Mail suchen
         const user = await prisma.users.findUnique({
             where: { uni_email: email },
         });
         if (!user) {
             return res.status(400).json({ error: "Benutzer existiert nicht" });
         }
+        // 2) Passwort prüfen
         const isValid = await bcrypt_1.default.compare(password, user.password_hash);
         if (!isValid) {
             return res.status(400).json({ error: "Falsches Passwort" });
         }
+        // 3) JWT erzeugen
         const token = jsonwebtoken_1.default.sign({ userId: user.id, email: user.uni_email }, process.env.JWT_SECRET, { expiresIn: "7d" });
         res.json({
             message: "Login erfolgreich",
@@ -352,22 +355,37 @@ app.get("/bookings/by-room-and-date", async (req, res) => {
 // 📌 Eigene Buchungen abrufen (z. B. für "My Bookings"-Seite)
 app.get("/bookings/me", async (req, res) => {
     try {
-        const userId = req.query.userId;
-        if (!userId) {
-            return res.status(400).json({ error: "Parameter ?userId= fehlt" });
+        // 1) Token prüfen
+        const auth = req.headers.authorization;
+        if (!auth) {
+            return res.status(401).json({ error: "Kein Token übermittelt" });
         }
+        const token = auth.replace("Bearer ", "");
+        let decoded;
+        try {
+            decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
+        }
+        catch (err) {
+            return res.status(401).json({ error: "Token ungültig" });
+        }
+        if (!decoded || typeof decoded !== "object" || !decoded.userId) {
+            return res.status(401).json({ error: "Token ungültig oder userId fehlt" });
+        }
+        // 2) Buchungen laden
         const bookings = await prisma.bookings.findMany({
-            where: { user_id: userId },
+            where: { user_id: decoded.userId },
             orderBy: { date: "asc" },
             include: {
-                rooms: true, // damit Raumname angezeigt werden kann
-            }
+                rooms: true,
+            },
         });
+        res.json(bookings);
+        // 3) Antwort senden
         res.json(bookings);
     }
     catch (err) {
         console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
-        res.status(500).json({ error: "Interner Serverfehler" });
+        res.status(401).json({ error: "Token ungültig" });
     }
 });
 // 📌 Öffnungszeiten abrufen (für Sidebar im Frontend)
