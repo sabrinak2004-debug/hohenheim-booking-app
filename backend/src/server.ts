@@ -287,9 +287,28 @@ app.post("/bookings", async (req, res) => {
     res.status(201).json(booking);
   } catch (err: any) {
     console.error("Fehler beim Anlegen der Buchung:", err);
-    res.status(500).json({
-      error: "Buchung fehlgeschlagen",
-      detail: String(err.message ?? err),
+
+    // ✅ DB-Fehlermeldung (z.B. aus Trigger: "Die Bibliothek ist an diesem Tag geschlossen.")
+    const dbMsg =
+      err?.meta?.cause ||                     // Prisma legt Ursache manchmal hier ab
+      err?.cause?.message ||                  // oder hier
+      (typeof err?.message === "string"
+        ? err.message.match(/message:\s*"([^"]+)"/)?.[1]  // fallback: aus String extrahieren
+        : null) ||
+      "Fehler beim Buchen";
+
+    // ✅ Wenn es ein Trigger/Business-Rule Fehler ist (P0001), dann 400
+    const pgCode =
+      err?.code ||                            // manchmal direkt
+      err?.meta?.code ||                      // manchmal hier
+      (typeof err?.message === "string"
+        ? err.message.match(/code:\s*"([^"]+)"/)?.[1]
+        : null);
+
+    const status = pgCode === "P0001" ? 400 : 500;
+
+    return res.status(status).json({
+      error: dbMsg,
     });
   }
 });
