@@ -312,30 +312,27 @@ app.post("/bookings", async (req, res) => {
   }
 });
 
-
-// 📌 Buchungen eines Nutzers abrufen
 app.get("/users/:userId/bookings", async (req, res) => {
   try {
     const userId = req.params.userId;
 
     const bookings = await prisma.bookings.findMany({
       where: { user_id: userId },
-      orderBy: [
-        { date: "asc" },
-        { starts_at: "asc" }
-      ],
-      include: {
-        rooms: true,   // Raumdaten mit zurückgeben
-      }
+      orderBy: [{ date: "asc" }, { starts_at: "asc" }],
+      include: { rooms: true },
     });
 
-    res.json(bookings);
+    return res.json(bookings); // ✅ return!
+  } catch (err: any) {
+    console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
 
-  } catch (err) {
-    console.error("Fehler beim Abrufen der Buchungen:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    if (res.headersSent) return; // ✅ verhindert zweiten Send
+
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
+
+
 // 📌 Öffnungszeiten abrufen
 app.get("/opening-hours", async (req, res) => {
   try {
