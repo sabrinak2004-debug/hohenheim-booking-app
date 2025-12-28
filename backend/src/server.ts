@@ -357,33 +357,30 @@ app.get("/exceptions", async (req, res) => {
     res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
+
 app.patch("/bookings/:id/cancel", async (req, res) => {
   try {
     const id = req.params.id;
 
-    const old = await prisma.bookings.findUnique({ where: { id } });
-
-    if (!old) {
-      return res.status(404).json({ error: "Buchung nicht gefunden" });
-    }
-
-    // ❗ Nur Status ändern, NICHT die Zeiten, NICHT room_id, NICHT user_id
-    const updated = await prisma.bookings.update({
+    const booking = await prisma.bookings.update({
       where: { id },
-      data: {
-        status: "cancelled"
-      },
+      data: { status: "CANCELLED" },
     });
 
-    res.json({ message: "Buchung storniert", booking: updated });
+    return res.json(booking);
   } catch (err: any) {
     console.error("Cancel-Fehler:", err);
-    res.status(500).json({
-      error: "Interner Serverfehler",
-      detail: err.message,
-    });
+
+    const dbMsg =
+      err?.meta?.cause ||
+      err?.cause?.message ||
+      err?.message?.match(/message:\s*"([^"]+)"/)?.[1] ||
+      "Stornierung fehlgeschlagen";
+
+    return res.status(400).json({ error: dbMsg });
   }
 });
+
 
 // 📌 Gebuchte Slots eines Raums an einem Datum abrufen (Prisma-kompatibel)
 app.get("/bookings/by-room-and-date", async (req, res) => {
