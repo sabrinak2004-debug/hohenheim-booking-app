@@ -3,8 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = require("./prisma");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
@@ -37,7 +36,7 @@ app.post("/auth/register", async (req, res) => {
         }
         // Passwort hashen
         const hash = await bcrypt_1.default.hash(password, 10);
-        const user = await prisma.users.create({
+        const user = await prisma_1.prisma.users.create({
             data: {
                 uni_email: email,
                 password_hash: hash,
@@ -63,7 +62,7 @@ app.post("/auth/login", async (req, res) => {
     try {
         const { email, password } = req.body;
         // 1) Benutzer anhand Uni-Mail suchen
-        const user = await prisma.users.findUnique({
+        const user = await prisma_1.prisma.users.findUnique({
             where: { uni_email: email },
         });
         if (!user) {
@@ -96,7 +95,7 @@ app.get("/me", async (req, res) => {
         }
         const token = auth.replace("Bearer ", "");
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        const user = await prisma.users.findUnique({
+        const user = await prisma_1.prisma.users.findUnique({
             where: { id: decoded.userId },
         });
         if (!user) {
@@ -115,7 +114,7 @@ app.get("/me", async (req, res) => {
 // 📌 Alle Räume abrufen
 app.get("/rooms", async (req, res) => {
     try {
-        const rooms = await prisma.rooms.findMany({
+        const rooms = await prisma_1.prisma.rooms.findMany({
             orderBy: { name: "asc" }
         });
         res.json(rooms);
@@ -129,7 +128,7 @@ app.get("/rooms", async (req, res) => {
 app.get("/rooms/:id", async (req, res) => {
     try {
         const id = req.params.id;
-        const room = await prisma.rooms.findUnique({
+        const room = await prisma_1.prisma.rooms.findUnique({
             where: { id },
         });
         if (!room) {
@@ -150,7 +149,7 @@ app.get("/rooms/:id/availability", async (req, res) => {
         if (!date) {
             return res.status(400).json({ error: "Parameter ?date=YYYY-MM-DD fehlt" });
         }
-        const result = await prisma.$queryRawUnsafe(`
+        const result = await prisma_1.prisma.$queryRawUnsafe(`
       WITH bounds AS (
         SELECT
           COALESCE(ex.opens, oh.opens) AS opens,
@@ -217,7 +216,7 @@ app.post("/bookings", async (req, res) => {
         const endsAt = new Date(dateOnly);
         endsAt.setHours(endHour, endMin, 0, 0);
         // Eintrag in bookings-Tabelle mit richtigen Typen anlegen
-        const booking = await prisma.bookings.create({
+        const booking = await prisma_1.prisma.bookings.create({
             data: {
                 room_id: roomId,
                 user_id: userId,
@@ -232,9 +231,22 @@ app.post("/bookings", async (req, res) => {
     }
     catch (err) {
         console.error("Fehler beim Anlegen der Buchung:", err);
-        res.status(500).json({
-            error: "Buchung fehlgeschlagen",
-            detail: String(err.message ?? err),
+        // ✅ DB-Fehlermeldung (z.B. aus Trigger: "Die Bibliothek ist an diesem Tag geschlossen.")
+        const dbMsg = err?.meta?.cause || // Prisma legt Ursache manchmal hier ab
+            err?.cause?.message || // oder hier
+            (typeof err?.message === "string"
+                ? err.message.match(/message:\s*"([^"]+)"/)?.[1] // fallback: aus String extrahieren
+                : null) ||
+            "Fehler beim Buchen";
+        // ✅ Wenn es ein Trigger/Business-Rule Fehler ist (P0001), dann 400
+        const pgCode = err?.code || // manchmal direkt
+            err?.meta?.code || // manchmal hier
+            (typeof err?.message === "string"
+                ? err.message.match(/code:\s*"([^"]+)"/)?.[1]
+                : null);
+        const status = pgCode === "P0001" ? 400 : 500;
+        return res.status(status).json({
+            error: dbMsg,
         });
     }
 });
@@ -242,7 +254,7 @@ app.post("/bookings", async (req, res) => {
 app.get("/users/:userId/bookings", async (req, res) => {
     try {
         const userId = req.params.userId;
-        const bookings = await prisma.bookings.findMany({
+        const bookings = await prisma_1.prisma.bookings.findMany({
             where: { user_id: userId },
             orderBy: [
                 { date: "asc" },
@@ -262,7 +274,7 @@ app.get("/users/:userId/bookings", async (req, res) => {
 // 📌 Öffnungszeiten abrufen
 app.get("/opening-hours", async (req, res) => {
     try {
-        const hours = await prisma.opening_hours.findMany({
+        const hours = await prisma_1.prisma.opening_hours.findMany({
             orderBy: { weekday: "asc" }
         });
         res.json(hours);
@@ -275,7 +287,7 @@ app.get("/opening-hours", async (req, res) => {
 // 📌 Schließtage / Feiertage
 app.get("/exceptions", async (req, res) => {
     try {
-        const exceptions = await prisma.exceptions.findMany({
+        const exceptions = await prisma_1.prisma.exceptions.findMany({
             orderBy: { date: "asc" }
         });
         res.json(exceptions);
@@ -288,12 +300,12 @@ app.get("/exceptions", async (req, res) => {
 app.patch("/bookings/:id/cancel", async (req, res) => {
     try {
         const id = req.params.id;
-        const old = await prisma.bookings.findUnique({ where: { id } });
+        const old = await prisma_1.prisma.bookings.findUnique({ where: { id } });
         if (!old) {
             return res.status(404).json({ error: "Buchung nicht gefunden" });
         }
         // ❗ Nur Status ändern, NICHT die Zeiten, NICHT room_id, NICHT user_id
-        const updated = await prisma.bookings.update({
+        const updated = await prisma_1.prisma.bookings.update({
             where: { id },
             data: {
                 status: "cancelled"
@@ -322,7 +334,7 @@ app.get("/bookings/by-room-and-date", async (req, res) => {
     next.setUTCDate(day.getUTCDate() + 1);
     try {
         // 1) Bevorzugt: Prisma mit Tages-Range
-        const bookings = await prisma.bookings.findMany({
+        const bookings = await prisma_1.prisma.bookings.findMany({
             where: {
                 room_id: roomId,
                 date: { gte: day, lt: next }, // <-- kein String-Vergleich!
@@ -336,7 +348,7 @@ app.get("/bookings/by-room-and-date", async (req, res) => {
         console.error("Prisma-Range-Query fehlgeschlagen, versuche RAW:", err);
         // 2) Fallback: RAW-SQL (falls Spalte als DATE vorliegt o.Ä.)
         try {
-            const rows = await prisma.$queryRawUnsafe(`
+            const rows = await prisma_1.prisma.$queryRawUnsafe(`
         SELECT *
         FROM bookings
         WHERE room_id = $1::uuid
@@ -372,7 +384,7 @@ app.get("/bookings/me", async (req, res) => {
             return res.status(401).json({ error: "Token ungültig oder userId fehlt" });
         }
         // 2) Buchungen laden
-        const bookings = await prisma.bookings.findMany({
+        const bookings = await prisma_1.prisma.bookings.findMany({
             where: { user_id: decoded.userId },
             orderBy: { date: "asc" },
             include: {
@@ -391,7 +403,7 @@ app.get("/bookings/me", async (req, res) => {
 // 📌 Öffnungszeiten abrufen (für Sidebar im Frontend)
 app.get("/opening-hours", async (req, res) => {
     try {
-        const hours = await prisma.opening_hours.findMany({
+        const hours = await prisma_1.prisma.opening_hours.findMany({
             orderBy: { weekday: "asc" }
         });
         res.json(hours);
@@ -404,7 +416,7 @@ app.get("/opening-hours", async (req, res) => {
 // 📌 Feiertage / Schließtage abrufen
 app.get("/exceptions", async (req, res) => {
     try {
-        const exceptions = await prisma.exceptions.findMany({
+        const exceptions = await prisma_1.prisma.exceptions.findMany({
             orderBy: { date: "asc" }
         });
         res.json(exceptions);
