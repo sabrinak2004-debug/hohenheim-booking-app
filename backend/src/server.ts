@@ -28,7 +28,7 @@ app.use(cookieParser());
 
 // Root Route
 app.get("/", (req, res) => {
-  res.json({ message: "Hohenheim Gruppenräume API läuft 🚀" });
+  return res.json({ message: "Hohenheim Gruppenräume API läuft 🚀" });
 });
 
 // 📌 Registrierung
@@ -59,7 +59,7 @@ app.post("/auth/register", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Registrierung erfolgreich",
       userId: user.id,
       token,
@@ -67,7 +67,7 @@ app.post("/auth/register", async (req, res) => {
 
   } catch (err: any) {
     console.error("Registrierungsfehler:", err);
-    res.status(500).json({ error: "Registrierung fehlgeschlagen" });
+    return res.status(500).json({ error: "Registrierung fehlgeschlagen" });
   }
 });
 
@@ -99,7 +99,7 @@ app.post("/auth/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    res.json({
+    return res.json({
       message: "Login erfolgreich",
       token,
       userId: user.id,
@@ -107,7 +107,7 @@ app.post("/auth/login", async (req, res) => {
 
   } catch (err) {
     console.error("Loginfehler:", err);
-    res.status(500).json({ error: "Login fehlgeschlagen" });
+    return res.status(500).json({ error: "Login fehlgeschlagen" });
   }
 });
 
@@ -132,13 +132,13 @@ app.get("/me", async (req, res) => {
       return res.status(404).json({ error: "Benutzer nicht gefunden" });
     }
 
-    res.json({
+    return res.json({
       name: user.display_name,
       email: user.uni_email,
       id: user.id,
     });
   } catch (err) {
-    res.status(401).json({ error: "Token ungültig" });
+    return res.status(401).json({ error: "Token ungültig" });
   }
 });
 
@@ -148,10 +148,10 @@ app.get("/rooms", async (req, res) => {
     const rooms = await prisma.rooms.findMany({
       orderBy: { name: "asc" }
     });
-    res.json(rooms);
+    return res.json(rooms);
   } catch (err) {
     console.error("Fehler beim Abrufen der Räume:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 
@@ -168,10 +168,10 @@ app.get("/rooms/:id", async (req, res) => {
       return res.status(404).json({ error: "Raum nicht gefunden" });
     }
 
-    res.json(room);
+    return res.json(room);
   } catch (err) {
     console.error("Fehler beim Abrufen des Raums:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 
@@ -230,7 +230,7 @@ app.get("/rooms/:id/availability", async (req, res) => {
       roomId
     );
 
-    res.json({
+    return res.json({
       roomId,
       date,
       free: result?.[0]?.free ?? []
@@ -238,7 +238,7 @@ app.get("/rooms/:id/availability", async (req, res) => {
 
   } catch (err) {
     console.error("Fehler beim Abrufen der Verfügbarkeit:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
   });
 
@@ -283,7 +283,7 @@ app.post("/bookings", async (req, res) => {
       },
     });
 
-    res.status(201).json(booking);
+    return res.status(201).json(booking);
   } catch (err: any) {
     console.error("Fehler beim Anlegen der Buchung:", err);
 
@@ -340,10 +340,10 @@ app.get("/opening-hours", async (req, res) => {
     const hours = await prisma.opening_hours.findMany({
       orderBy: { weekday: "asc" }
     });
-    res.json(hours);
+    return res.json(hours);
   } catch (err) {
     console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 // 📌 Schließtage / Feiertage
@@ -352,10 +352,10 @@ app.get("/exceptions", async (req, res) => {
     const exceptions = await prisma.exceptions.findMany({
       orderBy: { date: "asc" }
     });
-    res.json(exceptions);
+    return res.json(exceptions);
   } catch (err) {
     console.error("Fehler beim Abrufen der Feiertage:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 
@@ -469,13 +469,13 @@ const bookings = await prisma.bookings.findMany({
   },
 });
 
-res.json(bookings);
+return res.json(bookings);
     // 3) Antwort senden
-    res.json(bookings);
+    return res.json(bookings);
 
   } catch (err) {
     console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
-    res.status(401).json({ error: "Token ungültig" });
+    return res.status(401).json({ error: "Token ungültig" });
   }
 });
 
@@ -486,11 +486,11 @@ app.get("/opening-hours", async (req, res) => {
       orderBy: { weekday: "asc" }
     });
 
-    res.json(hours);
+    return res.json(hours);
 
   } catch (err) {
     console.error("Fehler beim Abrufen der Öffnungszeiten:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 // 📌 Feiertage / Schließtage abrufen
@@ -500,11 +500,11 @@ app.get("/exceptions", async (req, res) => {
       orderBy: { date: "asc" }
     });
 
-    res.json(exceptions);
+    return res.json(exceptions);
 
   } catch (err) {
     console.error("Fehler beim Abrufen der Feiertage:", err);
-    res.status(500).json({ error: "Interner Serverfehler" });
+    return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
 
