@@ -322,15 +322,16 @@ app.get("/users/:userId/bookings", async (req, res) => {
       include: { rooms: true },
     });
 
-    return res.json(bookings); // ✅ return!
+    return res.json(bookings); // ✅ wichtig
   } catch (err: any) {
     console.error("Fehler beim Abrufen der eigenen Buchungen:", err);
 
-    if (res.headersSent) return; // ✅ verhindert zweiten Send
+    if (res.headersSent) return; // ✅ verhindert doppelte Antwort
 
     return res.status(500).json({ error: "Interner Serverfehler" });
   }
 });
+
 
 
 // 📌 Öffnungszeiten abrufen
@@ -364,7 +365,7 @@ app.patch("/bookings/:id/cancel", async (req, res) => {
 
     const booking = await prisma.bookings.update({
       where: { id },
-      data: { status: "CANCELLED" },
+      data: { status: "cancelled" }, // ✅ genau dein Statuswert
     });
 
     return res.json(booking);
@@ -374,12 +375,15 @@ app.patch("/bookings/:id/cancel", async (req, res) => {
     const dbMsg =
       err?.meta?.cause ||
       err?.cause?.message ||
-      err?.message?.match(/message:\s*"([^"]+)"/)?.[1] ||
+      (typeof err?.message === "string"
+        ? err.message.match(/message:\s*"([^"]+)"/)?.[1]
+        : null) ||
       "Stornierung fehlgeschlagen";
 
     return res.status(400).json({ error: dbMsg });
   }
 });
+
 
 
 // 📌 Gebuchte Slots eines Raums an einem Datum abrufen (Prisma-kompatibel)
